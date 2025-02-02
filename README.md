@@ -1,6 +1,10 @@
 # orio_windows
 
-A new Flutter project.
+This projet was my second try to use Visual Studio Code and GitHub Copilot for an app I need to configure an Android Phone :
+
+- Disabling/Enabling System Updates
+- Disable / Enable Applications
+- Changing the Locations
 
 ## Getting Started
 
