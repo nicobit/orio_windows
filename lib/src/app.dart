@@ -27,7 +27,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
   bool isDeviceConnected = false;
   bool isAdbInstalled = false;
   bool _isLoading = false; // Add this variable
-  bool _isAdbOutputVisible = true; // Add this variable
+  final bool _isAdbOutputVisible = true; // Add this variable
   bool isSystemUpdateDisabled = false; // Add this variable
   List<AppInfo> apps = [];
   late TabController _tabController;
@@ -78,13 +78,14 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
   // Method to check ADB device connection
   Future<void> checkDeviceConnection() async {
     String command = "adb devices";
-    final result = await run(command.split(' ')[0], command.split(' ').sublist(1));
+    final result = await runExecutableArguments(command.split(' ')[0], command.split(' ').sublist(1));
    
     debugPrint(result.stdout.toString());
    
     setState(() {
       // Check if device is connected
-      if (result.stdout.toString().contains('device')) {
+      List<String> lines = result.stdout.toString().split('\n');
+      if (lines.length > 1 && lines[1].trim().isNotEmpty) {
         isDeviceConnected = true;
         listNonSystemApps(); // Load the list of apps when the device is connected
         getCurrentLanguage(); // Get the current language when the device is connected
@@ -99,7 +100,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
   // Method to get the current language of the Android phone
   Future<void> getCurrentLanguage() async {
     String command = "adb shell getprop persist.sys.locale";
-    final result = await run(command,[]);
+    final result = await runExecutableArguments(command.split(' ')[0], command.split(' ').sublist(1));
     setState(() {
       currentLanguage = result.stdout.toString().trim();
       adbOutput += "\n\$ $command\n${result.stdout.toString()}";
@@ -129,7 +130,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
   // Method to check if system updates are disabled
   Future<void> checkSystemUpdateStatus() async {
     String command = "adb shell pm list packages -d";
-    final result = await run(command, []);
+    final result = await runExecutableArguments(command.split(' ')[0], command.split(' ').sublist(1));
     setState(() {
       isSystemUpdateDisabled = result.stdout.toString().split('\n').any((line) => line.trim() == 'package:com.google.android.gms');
       adbOutput += "\n\$ $command\n${result.stdout.toString()}";
