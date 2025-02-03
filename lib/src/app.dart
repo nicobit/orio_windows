@@ -31,21 +31,93 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
   final bool _isAdbOutputVisible = true;
   bool isSystemUpdateDisabled = false;
   List<AppInfo> apps = [];
+  List<AppInfo> filteredApps = [];
   late TabController _tabController;
   String currentLanguage = "";
   Set<String> selectedApps = {}; // Add this variable
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+  String selectedLanguage = 'English';
+
+  final Map<String, Map<String, String>> buttonTexts = {
+    'English': {
+      'checkDeviceConnection': 'Check Device Connection',
+      'openLocaleSettings': 'Open Locale Settings',
+      'disableUpdates': 'Disable Updates',
+      'enableUpdates': 'Enable Updates',
+      'listApps': 'List Apps',
+      'saveSelectedApps': 'Save Selected Apps',
+      'disableSelected': 'Disable Selected',
+      'deleteSelected': 'Delete Selected',
+      'languageTab': 'Language',
+      'disableUpdatesTab': 'Disable Updates',
+      'listAppsTab': 'List Apps',
+      'adbOutputTab': 'ADB Output',
+    },
+    'French': {
+      'checkDeviceConnection': 'Vérifier la connexion de l\'appareil',
+      'openLocaleSettings': 'Ouvrir les paramètres de langue',
+      'disableUpdates': 'Désactiver les mises à jour',
+      'enableUpdates': 'Activer les mises à jour',
+      'listApps': 'Lister les applications',
+      'saveSelectedApps': 'Enregistrer les applications sélectionnées',
+      'disableSelected': 'Désactiver les sélectionnés',
+      'deleteSelected': 'Supprimer les sélectionnés',
+      'languageTab': 'Langue',
+      'disableUpdatesTab': 'Désactiver les mises à jour',
+      'listAppsTab': 'Lister les applications',
+      'adbOutputTab': 'Sortie ADB',
+    },
+    'German': {
+      'checkDeviceConnection': 'Geräteverbindung prüfen',
+      'openLocaleSettings': 'Spracheinstellungen öffnen',
+      'disableUpdates': 'Updates deaktivieren',
+      'enableUpdates': 'Updates aktivieren',
+      'listApps': 'Apps auflisten',
+      'saveSelectedApps': 'Ausgewählte Apps speichern',
+      'disableSelected': 'Ausgewählte deaktivieren',
+      'deleteSelected': 'Ausgewählte löschen',
+      'languageTab': 'Sprache',
+      'disableUpdatesTab': 'Updates deaktivieren',
+      'listAppsTab': 'Apps auflisten',
+      'adbOutputTab': 'ADB-Ausgabe',
+    },
+    'Italian': {
+      'checkDeviceConnection': 'Controlla connessione dispositivo',
+      'openLocaleSettings': 'Apri impostazioni lingua',
+      'disableUpdates': 'Disabilita aggiornamenti',
+      'enableUpdates': 'Abilita aggiornamenti',
+      'listApps': 'Elenca app',
+      'saveSelectedApps': 'Salva app selezionate',
+      'disableSelected': 'Disabilita selezionati',
+      'deleteSelected': 'Elimina selezionati',
+      'languageTab': 'Lingua',
+      'disableUpdatesTab': 'Disabilita aggiornamenti',
+      'listAppsTab': 'Elenca app',
+      'adbOutputTab': 'Output ADB',
+    },
+  };
 
   @override
   void initState() {
     super.initState();
     checkAdbInstallation();
     _tabController = TabController(length: 4, vsync: this);
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text;
+      filteredApps = apps.where((app) => app.packageName.contains(_searchQuery)).toList();
+    });
   }
 
   Future<void> runADBCommand(String command) async {
@@ -131,12 +203,12 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
     setState(() {
       _isLoading = true;
     });
-    String command = "adb shell pm list packages"; // add -3 to retrieve not system update
+    String command = "adb shell pm list packages -3"; // add -3 to retrieve not system update
     final result = await runExecutableArguments(command.split(' ')[0], command.split(' ').sublist(1));
     List<AppInfo> appList = [];
     for (String line in result.stdout.toString().split('\n')) {
       if (line.isNotEmpty) {
-        String packageName = line.split(':')[1];
+        String packageName = line.split(':')[1].toString().trim();
         bool isEnabled = await isAppEnabled(packageName);
         appList.add(AppInfo(packageName: packageName, isEnabled: isEnabled));
       }
@@ -146,6 +218,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
     await loadSelectedApps(); // Load selected apps from file
     setState(() {
       apps = appList;
+      filteredApps = appList;
       _isLoading = false;
       adbOutput += "\n\$ $command\n${result.stdout.toString()}";
     });
@@ -165,7 +238,9 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
     setState(() {
       adbOutput += "\n\$ $command\n${result.stdout.toString()}";
       if (result.stdout.toString().contains('enabled') || result.stdout.toString().contains('disabled')) {
-        apps.firstWhere((app) => app.packageName == packageName).isEnabled = enable;
+        if (apps.any((app) => app.packageName == packageName)) {
+          apps.firstWhere((app) => app.packageName == packageName).isEnabled = enable;
+        }
       }
     });
   }
@@ -195,15 +270,32 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
     }
   }
 
-  Future<void> selectAppsFromFile() async {
-    await loadSelectedApps();
-    setState(() {
-      for (String packageName in selectedApps) {
-        if (apps.any((app) => app.packageName == packageName)) {
-          apps.firstWhere((app) => app.packageName == packageName).isEnabled = false;
-        }
+  Future<void> deleteSelectedApps() async {
+    for (String packageName in selectedApps) {
+      bool? confirm = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Confirm Deletion'),
+            content: Text('Are you sure you want to delete $packageName?'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text('Delete'),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirm == true) {
+        String command = "adb uninstall $packageName";
+        await runADBCommand(command);
       }
-    });
+    }
   }
 
   @override
@@ -213,6 +305,20 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          DropdownButton<String>(
+            value: selectedLanguage,
+            onChanged: (String? newValue) {
+              setState(() {
+                selectedLanguage = newValue!;
+              });
+            },
+            items: buttonTexts.keys.map<DropdownMenuItem<String>>((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(value),
+              );
+            }).toList(),
+          ),
           Text(
             isAdbInstalled
                 ? "ADB is Installed and Configured"
@@ -227,7 +333,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
             ElevatedButton.icon(
               onPressed: checkDeviceConnection,
               icon: Icon(Icons.usb, color: Colors.white),
-              label: Text("Check Device Connection"),
+              label: Text(buttonTexts[selectedLanguage]!['checkDeviceConnection']!),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
@@ -239,10 +345,10 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                 child: TabBar(
                   controller: _tabController,
                   tabs: [
-                    Tab(text: "Language"),
-                    Tab(text: "Disable Updates"),
-                    Tab(text: "List Apps"),
-                    Tab(text: "ADB Output"),
+                    Tab(text: buttonTexts[selectedLanguage]!['languageTab']!),
+                    Tab(text: buttonTexts[selectedLanguage]!['disableUpdatesTab']!),
+                    Tab(text: buttonTexts[selectedLanguage]!['listAppsTab']!),
+                    Tab(text: buttonTexts[selectedLanguage]!['adbOutputTab']!),
                   ],
                 ),
               ),
@@ -257,7 +363,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                           ElevatedButton.icon(
                             onPressed: openLocaleSettings,
                             icon: Icon(Icons.language, color: Colors.white),
-                            label: Text("Open Locale Settings"),
+                            label: Text(buttonTexts[selectedLanguage]!['openLocaleSettings']!),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
@@ -273,7 +379,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                           ElevatedButton.icon(
                             onPressed: disableSystemUpdates,
                             icon: Icon(Icons.system_update, color: Colors.white),
-                            label: Text("Disable Updates"),
+                            label: Text(buttonTexts[selectedLanguage]!['disableUpdates']!),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
@@ -283,7 +389,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                           ElevatedButton.icon(
                             onPressed: enableSystemUpdates,
                             icon: Icon(Icons.system_update, color: Colors.white),
-                            label: Text("Enable Updates"),
+                            label: Text(buttonTexts[selectedLanguage]!['enableUpdates']!),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
@@ -305,7 +411,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                             ElevatedButton.icon(
                               onPressed: listNonSystemApps,
                               icon: Icon(Icons.apps, color: Colors.white),
-                              label: Text("List Apps"),
+                              label: Text(buttonTexts[selectedLanguage]!['listApps']!),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue,
                                 foregroundColor: Colors.white,
@@ -314,7 +420,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                             ElevatedButton.icon(
                               onPressed: saveSelectedApps,
                               icon: Icon(Icons.save, color: Colors.white),
-                              label: Text("Save Selected Apps"),
+                              label: Text(buttonTexts[selectedLanguage]!['saveSelectedApps']!),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue,
                                 foregroundColor: Colors.white,
@@ -323,49 +429,59 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                             ElevatedButton.icon(
                               onPressed: disableSelectedApps,
                               icon: Icon(Icons.delete_sweep, color: Colors.white),
-                              label: Text("Disable Selected"),
+                              label: Text(buttonTexts[selectedLanguage]!['disableSelected']!),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue,
                                 foregroundColor: Colors.white,
                               ),
                             ),
                             ElevatedButton.icon(
-                              onPressed: selectAppsFromFile,
-                              icon: Icon(Icons.file_download, color: Colors.white),
-                              label: Text("Select from File"),
+                              onPressed: deleteSelectedApps,
+                              icon: Icon(Icons.delete, color: Colors.white),
+                              label: Text(buttonTexts[selectedLanguage]!['deleteSelected']!),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
+                                backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
                               ),
                             ),
                           ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: InputDecoration(
+                              labelText: "Search Apps",
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
                         ),
                         if (_isLoading)
                           CircularProgressIndicator()
                         else
                           Expanded(
                             child: ListView.builder(
-                              itemCount: apps.length,
+                              itemCount: filteredApps.length,
                               itemBuilder: (context, index) {
                                 return ListTile(
                                   tileColor: index % 2 == 0 ? Colors.white : Colors.grey[200],
                                   leading: Checkbox(
-                                    value: selectedApps.contains(apps[index].packageName),
+                                    value: selectedApps.contains(filteredApps[index].packageName),
                                     onChanged: (bool? value) {
                                       setState(() {
                                         if (value == true) {
-                                          selectedApps.add(apps[index].packageName);
+                                          selectedApps.add(filteredApps[index].packageName);
                                         } else {
-                                          selectedApps.remove(apps[index].packageName);
+                                          selectedApps.remove(filteredApps[index].packageName);
                                         }
                                       });
                                     },
                                   ),
-                                  title: Text(apps[index].packageName),
+                                  title: Text(filteredApps[index].packageName),
                                   trailing: Switch(
-                                    value: apps[index].isEnabled,
+                                    value: filteredApps[index].isEnabled,
                                     onChanged: (value) {
-                                      toggleApp(apps[index].packageName, value);
+                                      toggleApp(filteredApps[index].packageName, value);
                                     },
                                   ),
                                 );
@@ -382,7 +498,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                             child: SingleChildScrollView(
                               child: Padding(
                                 padding: const EdgeInsets.only(top: 20.0),
-                                child: Text(
+                                child: SelectableText(
                                   "ADB Output: \n$adbOutput",
                                   style: TextStyle(fontSize: 14),
                                 ),
