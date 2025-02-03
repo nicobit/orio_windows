@@ -131,8 +131,8 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
     setState(() {
       _isLoading = true;
     });
-    String command = "adb shell pm list packages "; // add -3 to retrieve not system update
-    final result = await run(command.split(' ')[0], command.split(' ').sublist(1));
+    String command = "adb shell pm list packages"; // add -3 to retrieve not system update
+    final result = await runExecutableArguments(command.split(' ')[0], command.split(' ').sublist(1));
     List<AppInfo> appList = [];
     for (String line in result.stdout.toString().split('\n')) {
       if (line.isNotEmpty) {
@@ -152,7 +152,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
   }
 
   Future<bool> isAppEnabled(String packageName) async {
-    String command = "adb shell pm list packages";
+    String command = "adb shell pm list packages -d";
     final result = await run(command.split(' ')[0], command.split(' ').sublist(1));
     return !result.stdout.toString().contains(packageName);
   }
@@ -170,9 +170,14 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
     });
   }
 
+  
+
   Future<void> saveSelectedApps() async {
     final file = File('packagesToDisable.txt');
     await file.writeAsString(selectedApps.join('\n'));
+    setState(() {
+      adbOutput += "\nSelected apps saved to packagesToDisable.txt";
+    });
   }
 
   Future<void> loadSelectedApps() async {
@@ -181,6 +186,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
       final lines = await file.readAsLines();
       setState(() {
         selectedApps = lines.toSet();
+        adbOutput += "\nContent of packagesToDisable.txt:\n${lines.join('\n')}";
       });
     }
   }
