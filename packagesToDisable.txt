@@ -1,1 +1,4 @@
 com.android.vending
+com.samsung.android.wifi.resources
+com.google.android.providers.media.module
+com.sec.android.gallery3d

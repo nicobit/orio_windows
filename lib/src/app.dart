@@ -152,7 +152,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
   }
 
   Future<bool> isAppEnabled(String packageName) async {
-    String command = "adb shell pm list packages -d";
+    String command = "adb shell pm list packages";
     final result = await run(command.split(' ')[0], command.split(' ').sublist(1));
     return !result.stdout.toString().contains(packageName);
   }
@@ -193,197 +193,188 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: loadSelectedApps(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
-        } else {
-          return Padding(
-            padding: EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  isAdbInstalled
-                      ? "ADB is Installed and Configured"
-                      : "ADB is Not Installed or Not Configured",
-                  style: TextStyle(fontSize: 18, color: isAdbInstalled ? Colors.green : Colors.red),
+    return Padding(
+      padding: EdgeInsets.all(20.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            isAdbInstalled
+                ? "ADB is Installed and Configured"
+                : "ADB is Not Installed or Not Configured",
+            style: TextStyle(fontSize: 18, color: isAdbInstalled ? Colors.green : Colors.red),
+          ),
+          if (isAdbInstalled) ...[
+            Text(
+              isDeviceConnected ? "Device Connected" : "No Device Connected",
+              style: TextStyle(fontSize: 18, color: isDeviceConnected ? Colors.green : Colors.red),
+            ),
+            ElevatedButton.icon(
+              onPressed: checkDeviceConnection,
+              icon: Icon(Icons.usb, color: Colors.white),
+              label: Text("Check Device Connection"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            if (isDeviceConnected) ...[
+              PreferredSize(
+                preferredSize: Size.fromHeight(30.0),
+                child: TabBar(
+                  controller: _tabController,
+                  tabs: [
+                    Tab(text: "Language"),
+                    Tab(text: "Disable Updates"),
+                    Tab(text: "List Apps"),
+                    Tab(text: "ADB Output"),
+                  ],
                 ),
-                if (isAdbInstalled) ...[
-                  Text(
-                    isDeviceConnected ? "Device Connected" : "No Device Connected",
-                    style: TextStyle(fontSize: 18, color: isDeviceConnected ? Colors.green : Colors.red),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: checkDeviceConnection,
-                    icon: Icon(Icons.usb, color: Colors.white),
-                    label: Text("Check Device Connection"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  if (isDeviceConnected) ...[
-                    PreferredSize(
-                      preferredSize: Size.fromHeight(30.0),
-                      child: TabBar(
-                        controller: _tabController,
-                        tabs: [
-                          Tab(text: "Language"),
-                          Tab(text: "Disable Updates"),
-                          Tab(text: "List Apps"),
-                          Tab(text: "ADB Output"),
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: openLocaleSettings,
+                            icon: Icon(Icons.language, color: Colors.white),
+                            label: Text("Open Locale Settings"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: openLocaleSettings,
-                                  icon: Icon(Icons.language, color: Colors.white),
-                                  label: Text("Open Locale Settings"),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                ),
-                              ],
+                          ElevatedButton.icon(
+                            onPressed: disableSystemUpdates,
+                            icon: Icon(Icons.system_update, color: Colors.white),
+                            label: Text("Disable Updates"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
                             ),
                           ),
-                          Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: disableSystemUpdates,
-                                  icon: Icon(Icons.system_update, color: Colors.white),
-                                  label: Text("Disable Updates"),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                ),
-                                SizedBox(height: 10),
-                                ElevatedButton.icon(
-                                  onPressed: enableSystemUpdates,
-                                  icon: Icon(Icons.system_update, color: Colors.white),
-                                  label: Text("Enable Updates"),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blue,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                ),
-                                SizedBox(height: 10),
-                                Text(
-                                  isSystemUpdateDisabled ? "System Updates Disabled" : "System Updates Enabled",
-                                  style: TextStyle(fontSize: 18, color: isSystemUpdateDisabled ? Colors.red : Colors.green),
-                                ),
-                              ],
+                          SizedBox(height: 10),
+                          ElevatedButton.icon(
+                            onPressed: enableSystemUpdates,
+                            icon: Icon(Icons.system_update, color: Colors.white),
+                            label: Text("Enable Updates"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
                             ),
                           ),
-                          Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  ElevatedButton.icon(
-                                    onPressed: listNonSystemApps,
-                                    icon: Icon(Icons.apps, color: Colors.white),
-                                    label: Text("List Apps"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: saveSelectedApps,
-                                    icon: Icon(Icons.save, color: Colors.white),
-                                    label: Text("Save Selected Apps"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: disableSelectedApps,
-                                    icon: Icon(Icons.delete_sweep, color: Colors.white),
-                                    label: Text("Disable Selected"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                  ),
-                                ],
+                          SizedBox(height: 10),
+                          Text(
+                            isSystemUpdateDisabled ? "System Updates Disabled" : "System Updates Enabled",
+                            style: TextStyle(fontSize: 18, color: isSystemUpdateDisabled ? Colors.red : Colors.green),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: listNonSystemApps,
+                              icon: Icon(Icons.apps, color: Colors.white),
+                              label: Text("List Apps"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
                               ),
-                              if (_isLoading)
-                                CircularProgressIndicator()
-                              else
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: apps.length,
-                                    itemBuilder: (context, index) {
-                                      return ListTile(
-                                        tileColor: index % 2 == 0 ? Colors.white : Colors.grey[200],
-                                        leading: Checkbox(
-                                          value: selectedApps.contains(apps[index].packageName),
-                                          onChanged: (bool? value) {
-                                            setState(() {
-                                              if (value == true) {
-                                                selectedApps.add(apps[index].packageName);
-                                              } else {
-                                                selectedApps.remove(apps[index].packageName);
-                                              }
-                                            });
-                                          },
-                                        ),
-                                        title: Text(apps[index].packageName),
-                                        trailing: Switch(
-                                          value: apps[index].isEnabled,
-                                          onChanged: (value) {
-                                            toggleApp(apps[index].packageName, value);
-                                          },
-                                        ),
-                                      );
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: saveSelectedApps,
+                              icon: Icon(Icons.save, color: Colors.white),
+                              label: Text("Save Selected Apps"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: disableSelectedApps,
+                              icon: Icon(Icons.delete_sweep, color: Colors.white),
+                              label: Text("Disable Selected"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_isLoading)
+                          CircularProgressIndicator()
+                        else
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: apps.length,
+                              itemBuilder: (context, index) {
+                                return ListTile(
+                                  tileColor: index % 2 == 0 ? Colors.white : Colors.grey[200],
+                                  leading: Checkbox(
+                                    value: selectedApps.contains(apps[index].packageName),
+                                    onChanged: (bool? value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          selectedApps.add(apps[index].packageName);
+                                        } else {
+                                          selectedApps.remove(apps[index].packageName);
+                                        }
+                                      });
                                     },
                                   ),
-                                ),
-                            ],
-                          ),
-                          Column(
-                            children: [
-                              Visibility(
-                                visible: _isAdbOutputVisible,
-                                child: Expanded(
-                                  child: SingleChildScrollView(
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(top: 20.0),
-                                      child: Text(
-                                        "ADB Output: \n$adbOutput",
-                                        style: TextStyle(fontSize: 14),
-                                      ),
-                                    ),
+                                  title: Text(apps[index].packageName),
+                                  trailing: Switch(
+                                    value: apps[index].isEnabled,
+                                    onChanged: (value) {
+                                      toggleApp(apps[index].packageName, value);
+                                    },
                                   ),
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                    Column(
+                      children: [
+                        Visibility(
+                          visible: _isAdbOutputVisible,
+                          child: Expanded(
+                            child: SingleChildScrollView(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 20.0),
+                                child: Text(
+                                  "ADB Output: \n$adbOutput",
+                                  style: TextStyle(fontSize: 14),
                                 ),
                               ),
-                            ],
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
-                ],
-              ],
-            ),
-          );
-        }
-      },
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
     );
   }
 }
