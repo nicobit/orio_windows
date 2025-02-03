@@ -170,8 +170,6 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
     });
   }
 
-  
-
   Future<void> saveSelectedApps() async {
     final file = File('packagesToDisable.txt');
     await file.writeAsString(selectedApps.join('\n'));
@@ -195,6 +193,17 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
     for (String packageName in selectedApps) {
       await toggleApp(packageName, false);
     }
+  }
+
+  Future<void> selectAppsFromFile() async {
+    await loadSelectedApps();
+    setState(() {
+      for (String packageName in selectedApps) {
+        if (apps.any((app) => app.packageName == packageName)) {
+          apps.firstWhere((app) => app.packageName == packageName).isEnabled = false;
+        }
+      }
+    });
   }
 
   @override
@@ -315,6 +324,15 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                               onPressed: disableSelectedApps,
                               icon: Icon(Icons.delete_sweep, color: Colors.white),
                               label: Text("Disable Selected"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: selectAppsFromFile,
+                              icon: Icon(Icons.file_download, color: Colors.white),
+                              label: Text("Select from File"),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue,
                                 foregroundColor: Colors.white,
