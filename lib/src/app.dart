@@ -25,16 +25,19 @@ class ADBControlPanel extends StatefulWidget {
 
 class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProviderStateMixin {
   String adbOutput = "";
-  bool isDeviceConnected = true;
+  bool isDeviceConnected = false;
   bool isAdbInstalled = false;
   bool _isLoading = false;
+  
   final bool _isAdbOutputVisible = true;
   bool isSystemUpdateDisabled = false;
+  String _disabledApps = "";
   List<AppInfo> apps = [];
   List<AppInfo> filteredApps = [];
   late TabController _tabController;
   String currentLanguage = "";
   Set<String> selectedApps = {}; // Add this variable
+  List<Map<String, String>> commands = []; // Add this variable
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
   String selectedLanguage = 'English';
@@ -102,7 +105,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
   void initState() {
     super.initState();
     checkAdbInstallation();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -158,7 +161,7 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
         getCurrentLanguage();
         checkSystemUpdateStatus();
       } else {
-        isDeviceConnected = true;
+        isDeviceConnected = false;
         adbOutput += "\n\$ $command\nNo device connected!";
       }
     });
@@ -203,9 +206,10 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
     setState(() {
       _isLoading = true;
     });
-    String command = "adb shell pm list packages -3"; // add -3 to retrieve not system update
+    String command = "adb shell pm list packages"; // add -3 to retrieve not system update
     final result = await runExecutableArguments(command.split(' ')[0], command.split(' ').sublist(1));
     List<AppInfo> appList = [];
+    _disabledApps = "";
     for (String line in result.stdout.toString().split('\n')) {
       if (line.isNotEmpty) {
         String packageName = line.split(':')[1].toString().trim();
@@ -225,9 +229,13 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
   }
 
   Future<bool> isAppEnabled(String packageName) async {
-    String command = "adb shell pm list packages -d";
-    final result = await run(command.split(' ')[0], command.split(' ').sublist(1));
-    return !result.stdout.toString().contains(packageName);
+    if(_disabledApps == "") {
+      String command = "adb shell pm list packages -d";
+      final result = await run(command.split(' ')[0], command.split(' ').sublist(1));
+      _disabledApps = result.stdout.toString();
+    }
+   
+    return _disabledApps.contains(packageName);
   }
 
   Future<void> toggleApp(String packageName, bool enable) async {
@@ -272,7 +280,13 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
 
   Future<void> deleteSelectedApps() async {
     for (String packageName in selectedApps) {
-      bool? confirm = await showDialog<bool>(
+      deleteApp(packageName);
+    }
+  }
+
+  Future<void> deleteApp(String packageName) async {
+
+     bool? confirm = await showDialog<bool>(
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
@@ -293,8 +307,45 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
       );
       if (confirm == true) {
         String command = "adb uninstall $packageName";
-        await runADBCommand(command);
+         await runADBCommand(command);
       }
+    
+  }
+
+  Future<void> saveCommandsToFile(List<Map<String, String>> commands) async {
+    final file = File('commands.csv');
+    final csvContent = StringBuffer();
+    csvContent.writeln('commandName,command');
+    for (var command in commands) {
+      csvContent.writeln('${command['commandName']},${command['command']}');
+    }
+    await file.writeAsString(csvContent.toString());
+    setState(() {
+      adbOutput += "\nCommands saved to commands.csv";
+    });
+  }
+
+  Future<void> loadCommandsFromFile() async {
+    final file = File('commands.csv');
+    if (await file.exists()) {
+      final lines = await file.readAsLines();
+      final commandsN = <Map<String, String>>[];
+      for (var line in lines.skip(1)) {
+        final parts = line.split(',');
+        if (parts.length == 2) {
+          commandsN.add({'commandName': parts[0], 'command': parts[1]});
+        }
+      }
+      setState(() {
+        adbOutput += "\nCommands loaded from commands.csv";
+        commands = commandsN;
+      });
+      
+    } else {
+      setState(() {
+        adbOutput += "\ncommands.csv file does not exist.";
+      });
+      
     }
   }
 
@@ -319,17 +370,17 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
               );
             }).toList(),
           ),
-          Text(
-            isAdbInstalled
-                ? "ADB is Installed and Configured"
-                : "ADB is Not Installed or Not Configured",
-            style: TextStyle(fontSize: 18, color: isAdbInstalled ? Colors.green : Colors.red),
-          ),
-          if (isAdbInstalled) ...[
+            if (!isAdbInstalled)
             Text(
-              isDeviceConnected ? "Device Connected" : "No Device Connected",
-              style: TextStyle(fontSize: 18, color: isDeviceConnected ? Colors.green : Colors.red),
+              "ADB is Not Installed or Not Configured",
+              style: TextStyle(fontSize: 18, color: Colors.red),
             ),
+          if (isAdbInstalled) ...[
+            if (!isDeviceConnected)
+              Text(
+              "No Device Connected",
+              style: TextStyle(fontSize: 18, color: Colors.red),
+              ),
             ElevatedButton.icon(
               onPressed: checkDeviceConnection,
               icon: Icon(Icons.usb, color: Colors.white),
@@ -345,10 +396,12 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                 child: TabBar(
                   controller: _tabController,
                   tabs: [
+                    Tab(text: buttonTexts[selectedLanguage]!['listAppsTab']!),
                     Tab(text: buttonTexts[selectedLanguage]!['languageTab']!),
                     Tab(text: buttonTexts[selectedLanguage]!['disableUpdatesTab']!),
-                    Tab(text: buttonTexts[selectedLanguage]!['listAppsTab']!),
+                    Tab(text: "Commands"),
                     Tab(text: buttonTexts[selectedLanguage]!['adbOutputTab']!),
+                    
                   ],
                 ),
               ),
@@ -356,158 +409,274 @@ class _ADBControlPanelState extends State<ADBControlPanel> with SingleTickerProv
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: openLocaleSettings,
-                            icon: Icon(Icons.language, color: Colors.white),
-                            label: Text(buttonTexts[selectedLanguage]!['openLocaleSettings']!),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: disableSystemUpdates,
-                            icon: Icon(Icons.system_update, color: Colors.white),
-                            label: Text(buttonTexts[selectedLanguage]!['disableUpdates']!),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          ElevatedButton.icon(
-                            onPressed: enableSystemUpdates,
-                            icon: Icon(Icons.system_update, color: Colors.white),
-                            label: Text(buttonTexts[selectedLanguage]!['enableUpdates']!),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          Text(
-                            isSystemUpdateDisabled ? "System Updates Disabled" : "System Updates Enabled",
-                            style: TextStyle(fontSize: 18, color: isSystemUpdateDisabled ? Colors.red : Colors.green),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
+                  Column(
+                    children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: listNonSystemApps,
-                              icon: Icon(Icons.apps, color: Colors.white),
-                              label: Text(buttonTexts[selectedLanguage]!['listApps']!),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: saveSelectedApps,
-                              icon: Icon(Icons.save, color: Colors.white),
-                              label: Text(buttonTexts[selectedLanguage]!['saveSelectedApps']!),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: disableSelectedApps,
-                              icon: Icon(Icons.delete_sweep, color: Colors.white),
-                              label: Text(buttonTexts[selectedLanguage]!['disableSelected']!),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: deleteSelectedApps,
-                              icon: Icon(Icons.delete, color: Colors.white),
-                              label: Text(buttonTexts[selectedLanguage]!['deleteSelected']!),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                          ],
+                      ElevatedButton.icon(
+                        onPressed: listNonSystemApps,
+                        icon: Icon(Icons.apps, color: Colors.white),
+                        label: Text(buttonTexts[selectedLanguage]!['listApps']!),
+                        style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
                         ),
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: TextField(
-                            controller: _searchController,
-                            decoration: InputDecoration(
-                              labelText: "Search Apps",
-                              border: OutlineInputBorder(),
-                            ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: saveSelectedApps,
+                        icon: Icon(Icons.save, color: Colors.white),
+                        label: Text(buttonTexts[selectedLanguage]!['saveSelectedApps']!),
+                        style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: disableSelectedApps,
+                        icon: Icon(Icons.delete_sweep, color: Colors.white),
+                        label: Text(buttonTexts[selectedLanguage]!['disableSelected']!),
+                        style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: deleteSelectedApps,
+                        icon: Icon(Icons.delete, color: Colors.white),
+                        label: Text(buttonTexts[selectedLanguage]!['deleteSelected']!),
+                        style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        ),
+                      ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        labelText: "Search Apps",
+                        border: OutlineInputBorder(),
+                      ),
+                      ),
+                    ),
+                    if (_isLoading)
+                      CircularProgressIndicator()
+                    else
+                      Expanded(
+                      child: ListView.builder(
+                        itemCount: filteredApps.length,
+                        itemBuilder: (context, index) {
+                        return ListTile(
+                        tileColor: index % 2 == 0 ? Colors.white : Colors.grey[200],
+                        leading: Checkbox(
+                        value: selectedApps.contains(filteredApps[index].packageName),
+                        onChanged: (bool? value) {
+                          setState(() {
+                          if (value == true) {
+                          selectedApps.add(filteredApps[index].packageName);
+                          } else {
+                          selectedApps.remove(filteredApps[index].packageName);
+                          }
+                          });
+                        },
+                        ),
+                        title: Text(filteredApps[index].packageName),
+                        trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Switch(
+                          value: filteredApps[index].isEnabled,
+                          onChanged: (value) {
+                          toggleApp(filteredApps[index].packageName, value);
+                          },
                           ),
+                          IconButton(
+                          icon: Icon(Icons.delete, color: Colors.red),
+                          onPressed: () {
+                          deleteApp(filteredApps[index].packageName);
+                          },
+                          ),
+                        ],
                         ),
-                        if (_isLoading)
-                          CircularProgressIndicator()
-                        else
-                          Expanded(
-                            child: ListView.builder(
-                              itemCount: filteredApps.length,
-                              itemBuilder: (context, index) {
-                                return ListTile(
-                                  tileColor: index % 2 == 0 ? Colors.white : Colors.grey[200],
-                                  leading: Checkbox(
-                                    value: selectedApps.contains(filteredApps[index].packageName),
-                                    onChanged: (bool? value) {
-                                      setState(() {
-                                        if (value == true) {
-                                          selectedApps.add(filteredApps[index].packageName);
-                                        } else {
-                                          selectedApps.remove(filteredApps[index].packageName);
-                                        }
-                                      });
-                                    },
-                                  ),
-                                  title: Text(filteredApps[index].packageName),
-                                  trailing: Switch(
-                                    value: filteredApps[index].isEnabled,
-                                    onChanged: (value) {
-                                      toggleApp(filteredApps[index].packageName, value);
-                                    },
-                                  ),
+                        );
+                        },
+                      ),
+                      ),
+                    ],
+                  ),
+                  Center(
+                    child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                      onPressed: openLocaleSettings,
+                      icon: Icon(Icons.language, color: Colors.white),
+                      label: Text(buttonTexts[selectedLanguage]!['openLocaleSettings']!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                      ),
+                    ],
+                    ),
+                  ),
+                  Center(
+                    child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                      onPressed: disableSystemUpdates,
+                      icon: Icon(Icons.system_update, color: Colors.white),
+                      label: Text(buttonTexts[selectedLanguage]!['disableUpdates']!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                      ),
+                      SizedBox(height: 10),
+                      ElevatedButton.icon(
+                      onPressed: enableSystemUpdates,
+                      icon: Icon(Icons.system_update, color: Colors.white),
+                      label: Text(buttonTexts[selectedLanguage]!['enableUpdates']!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                      isSystemUpdateDisabled ? "System Updates Disabled" : "System Updates Enabled",
+                      style: TextStyle(fontSize: 18, color: isSystemUpdateDisabled ? Colors.red : Colors.green),
+                      ),
+                    ],
+                    ),
+                  ),
+                 Column(
+                  children: [
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await loadCommandsFromFile();
+                      },
+                      icon: Icon(Icons.file_download, color: Colors.white),
+                      label: Text("Load Commands"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await saveCommandsToFile(commands);
+                      },
+                      icon: Icon(Icons.save, color: Colors.white),
+                      label: Text("Save Commands"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        String? commandName = await _showInputDialog(context, "Enter Command Name");
+                        if (commandName != null && commandName.isNotEmpty) {
+                          String? command = await _showInputDialog(context, "Enter Command");
+                          if (command != null && command.isNotEmpty) {
+                            setState(() {
+                              commands.add({'commandName': commandName, 'command': command});
+                            });
+                            await saveCommandsToFile(commands);
+                          }
+                        }
+                      },
+                      icon: Icon(Icons.add, color: Colors.white),
+                      label: Text("New"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                      ]
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: commands.length,
+                        itemBuilder: (context, index) {
+                            return ListTile(
+                            title: Text(commands[index]['commandName']!),
+                            subtitle: Text(commands[index]['command']!),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                              IconButton(
+                                icon: Icon(Icons.play_arrow, color: Colors.green),
+                                onPressed: () async {
+                                await runADBCommand(commands[index]['command']!);
+                                },
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.delete, color: Colors.red),
+                                onPressed: () async {
+                                bool? confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (BuildContext context) {
+                                  return AlertDialog(
+                                    title: Text('Confirm Deletion'),
+                                    content: Text('Are you sure you want to delete ${commands[index]['commandName']}?'),
+                                    actions: <Widget>[
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(false),
+                                      child: Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(true),
+                                      child: Text('Delete'),
+                                    ),
+                                    ],
+                                  );
+                                  },
                                 );
-                              },
-                            ),
-                          ),
-                      ],
-                    ),
-                    Column(
-                      children: [
-                        Visibility(
-                          visible: _isAdbOutputVisible,
-                          child: Expanded(
-                            child: SingleChildScrollView(
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 20.0),
-                                child: SelectableText(
-                                  "ADB Output: \n$adbOutput",
-                                  style: TextStyle(fontSize: 14),
-                                ),
+                                if (confirm == true) {
+                                  setState(() {
+                                  commands.removeAt(index);
+                                  });
+                                  await saveCommandsToFile(commands);
+                                }
+                                },
                               ),
+                              ],
                             ),
-                          ),
-                        ),
-                      ],
+                            );
+                        },
+                      ),
                     ),
+                  ],
+                ),
+                  Column(
+                    children: [
+                    Visibility(
+                      visible: _isAdbOutputVisible,
+                      child: Expanded(
+                      child: SingleChildScrollView(
+                        child: Padding(
+                        padding: const EdgeInsets.only(top: 20.0),
+                        child: SelectableText(
+                          "ADB Output: \n$adbOutput",
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        ),
+                      ),
+                      ),
+                    ),
+                    ],
+                  ),
+                 
                   ],
                 ),
               ),
@@ -524,4 +693,35 @@ class AppInfo {
   bool isEnabled;
 
   AppInfo({required this.packageName, required this.isEnabled});
+}
+Future<String?> _showInputDialog(BuildContext context, String title) async {
+  String input = '';
+  return showDialog<String>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text(title),
+        content: TextField(
+          onChanged: (value) {
+            input = value;
+          },
+          decoration: InputDecoration(hintText: "Enter text here"),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(input);
+            },
+            child: Text('OK'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: Text('Cancel'),
+          ),
+        ],
+      );
+    },
+  );
 }

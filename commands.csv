@@ -1,0 +1,7 @@
+commandName,command
+Suona 1,adb shell cmd notification post -t "Test" -c "Test Notification"
+Alza volume,adb shell settings put system volume_system 7
+Disabilitare aggiornamenti,adb shell pm disable-user --user 0 com.google.android.gms
+Apri Settaggi Lingua,adb shell am start -a android.settings.LOCALE_SETTINGS
+Apri NetFlix,adb shell monkey -p com.netflix.mediaclient -c android.intent.category.LAUNCHER 1
+Apri Netflix -1,adb shell am start -n com.netflix.mediaclient/.MainActivity
