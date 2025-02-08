@@ -1,7 +1,9 @@
 commandName,command
-Suona 1,adb shell cmd notification post -t "Test" -c "Test Notification"
 Alza volume,adb shell settings put system volume_system 7
 Disabilitare aggiornamenti,adb shell pm disable-user --user 0 com.google.android.gms
 Apri Settaggi Lingua,adb shell am start -a android.settings.LOCALE_SETTINGS
 Apri NetFlix,adb shell monkey -p com.netflix.mediaclient -c android.intent.category.LAUNCHER 1
 Apri Netflix -1,adb shell am start -n com.netflix.mediaclient/.MainActivity
+lista application,adb devices
+Emetti suono,adb shell input keyevent 66 && sleep 0.2 && adb shell input keyevent 67
+Disabilitare one drive,adb shell pm disable-user --user 0 com.microsoft.skydrive

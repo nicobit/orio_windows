@@ -6,6 +6,14 @@ This projet was my second try to use Visual Studio Code and GitHub Copilot for a
 - Disable / Enable Applications
 - Changing the Locations
 
+## API Key / Token
+
+The functions in hugging_face_api retrieve the API key from the file APIKey.txt. Create it and add the key: HaggingFace inference API are used. 
+
+It should be in the root folder of the project when debugging from Visual StudioCode. 
+
+When executing the exe directly , it has to be on the same path of the excel.
+
 ## How to build a release version
 
  ### Enable Windows Support in Flutter
@@ -52,3 +60,7 @@ bash
 build/windows/runner/Release/your_app.exe
 
 ```
+
+# Build and create zip
+
+Run buildAndZip.bat if you want diretly build in release mode and create the zip of it.
